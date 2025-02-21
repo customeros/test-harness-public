@@ -1,0 +1,74 @@
+name: Deploy Frontera App
+
+on:
+  # Automated trigger from Create Release workflow
+  workflow_run:
+    workflows: ["Create Release"]
+    types:
+      - completed
+
+  # Manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy'
+        type: choice
+        required: true
+
+jobs:
+  # Job to get available tags for the workflow_dispatch input
+  get-tags:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.get_tags.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed to fetch all tags
+
+      - name: Get all tags
+        id: get_tags
+        run: |
+          TAGS=$(git tag -l --sort=-v:refname | jq -R . | jq -s .)
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+
+  # Main deployment job
+  deploy:
+    needs: [get-tags]
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      # For automated deployment via workflow_run
+      - name: Download workflow artifacts
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Read version from artifact
+        if: github.event_name == 'workflow_run'
+        id: read_version
+        run: |
+          echo "version=$(cat version.txt)" >> $GITHUB_OUTPUT
+
+      - name: Set deployment version
+        id: set_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ steps.read_version.outputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      # Common deployment step using the determined version
+      - name: Trigger Frontera App Workflow
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.FE_TESTS_GITHUB_TOKEN }}
+          repository: customeros/cloud
+          event-type: deploy-frontera-app
+          client-payload: '{"version": "${{ steps.set_version.outputs.version }}"}'
