@@ -55,11 +55,20 @@ jobs:
         run: |
           echo "version=$(cat version.txt)" >> $GITHUB_OUTPUT
 
-      # Common deployment step using the appropriate version source
+      - name: Set deployment version
+        id: set_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ steps.read_version.outputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      # Common deployment step using the determined version
       - name: Trigger Frontera App Workflow
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.FE_TESTS_GITHUB_TOKEN }}
           repository: customeros/cloud
           event-type: deploy-frontera-app
-          client-payload: '{"version": "${{ github.event_name == 'workflow_dispatch' && inputs.version || steps.read_version.outputs.version }}"}'
+          client-payload: '{"version": "${{ steps.set_version.outputs.version }}"}'
