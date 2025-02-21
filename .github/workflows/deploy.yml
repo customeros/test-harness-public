@@ -11,36 +11,35 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to deploy'
-        type: choice
+        description: 'Version to deploy (e.g., v1.2.3)'
+        type: string
         required: true
 
 jobs:
-  # Job to get available tags for the workflow_dispatch input
-  get-tags:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    outputs:
-      tags: ${{ steps.get_tags.outputs.tags }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Needed to fetch all tags
-
-      - name: Get all tags
-        id: get_tags
-        run: |
-          TAGS=$(git tag -l --sort=-v:refname | jq -R . | jq -s .)
-          echo "tags=$TAGS" >> $GITHUB_OUTPUT
-
   # Main deployment job
   deploy:
-    needs: [get-tags]
     if: |
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          fetch-depth: 0  # Needed to fetch all tags
+
+      - name: Validate manual version input
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAGS=$(git tag -l)
+          if ! echo "$TAGS" | grep -q "^${{ inputs.version }}$"; then
+            echo "Error: Version ${{ inputs.version }} is not a valid tag"
+            echo "Available tags:"
+            echo "$TAGS"
+            exit 1
+          fi
+          echo "Version ${{ inputs.version }} is valid"
+
       # For automated deployment via workflow_run
       - name: Download workflow artifacts
         if: github.event_name == 'workflow_run'
