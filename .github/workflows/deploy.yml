@@ -1,4 +1,4 @@
-name: Deploy Frontera App
+name: Deploy Silviu's App
 
 on:
   workflow_run:
