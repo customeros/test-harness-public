@@ -2,9 +2,9 @@ name: react-docker-app
 
 on:
   push:
-    branches: ['main']
+    branches: ['otter']
   pull_request:
-    branches: ['main']
+    branches: ['otter']
   release:
     types: [created, edited]
 
